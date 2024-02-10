@@ -1,15 +1,19 @@
 use crate::{Address, EAddress, Immediate, Instruction, Location, Op, Register, Source};
 
-use nom::{
+// use winnow::InputIter;
+// use winnow::InputLength;
+// use winnow::Slice;
+use winnow::{
     bits::complete::{bool, take},
     combinator::map,
-    IResult, InputIter, InputLength, Slice,
+    stream::{AsBytes, Stream},
+    IResult,
 };
 
 pub type BitInput<'a> = (&'a [u8], usize);
 
 pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
-    use nom::sequence::tuple;
+    use winnow::sequence::tuple;
     let (i, opcode) = parse_opcode(i)?;
     let (i, destination, source) = match opcode {
         Op::MovRegRM => {
@@ -108,7 +112,7 @@ pub fn take_2bits(i: BitInput) -> IResult<BitInput, u8> {
 
 pub fn parse_reg<I>(w_bit: bool) -> impl FnMut((I, usize)) -> IResult<(I, usize), Register>
 where
-    I: Slice<std::ops::RangeFrom<usize>> + InputIter<Item = u8> + InputLength,
+    I: Stream<Token = u8> + AsBytes,
 {
     map(
         take(3u8),
