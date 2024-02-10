@@ -1,24 +1,20 @@
 use crate::{Address, EAddress, Immediate, Instruction, Location, Op, Register, Source};
 
-// use winnow::InputIter;
-// use winnow::InputLength;
-// use winnow::Slice;
 use winnow::{
-    bits::complete::{bool, take},
-    combinator::map,
-    stream::{AsBytes, Stream},
-    IResult,
+    bits::{bool, take},
+    error::ParseError,
+    stream::{AsBytes, Stream, StreamIsPartial},
+    IResult, Parser,
 };
 
 pub type BitInput<'a> = (&'a [u8], usize);
 
 pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
-    use winnow::sequence::tuple;
     let (i, opcode) = parse_opcode(i)?;
     let (i, destination, source) = match opcode {
         Op::MovRegRM => {
-            let (i, (d_bit, is_word, mode)) = tuple((bool, bool, take_2bits))(i)?;
-            let (i, reg) = parse_reg(is_word)(i)?;
+            let (i, (d_bit, is_word, mode)) = (bool, bool, take_2bits).parse_next(i)?;
+            let (i, reg) = parse_reg(is_word).parse_next(i)?;
             let (i, rm) = parse_rm(mode, is_word, i)?;
             if d_bit {
                 (i, Location::Reg(reg), Source::Loc(rm))
@@ -28,7 +24,7 @@ pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
         }
         Op::MovImmediateReg => {
             let (i, is_word) = bool(i)?;
-            let (i, reg) = parse_reg(is_word)(i)?;
+            let (i, reg) = parse_reg(is_word).parse_next(i)?;
             let (i, val) = parse_immediate(i, is_word)?;
             (i, Location::Reg(reg), Source::Imm(val))
         }
@@ -61,7 +57,7 @@ fn parse_immediate(i: BitInput, is_word: bool) -> IResult<BitInput, Immediate> {
 fn parse_rm(mode: u8, w_bit: bool, i: BitInput) -> IResult<BitInput, Location> {
     assert!(mode <= 3);
     if let 0b11 = mode {
-        let (i, reg) = parse_reg(w_bit)(i)?;
+        let (i, reg) = parse_reg(w_bit).parse_next(i)?;
         Ok((i, Location::Reg(reg)))
     } else {
         let (i, addr) = parse_addr(i)?;
@@ -110,11 +106,11 @@ pub fn take_2bits(i: BitInput) -> IResult<BitInput, u8> {
     take(2u8)(i)
 }
 
-pub fn parse_reg<I>(w_bit: bool) -> impl FnMut((I, usize)) -> IResult<(I, usize), Register>
+pub fn parse_reg<I, E: ParseError<(I, usize)>>(w_bit: bool) -> impl Parser<(I, usize), Register, E>
 where
-    I: Stream<Token = u8> + AsBytes,
+    I: Stream<Token = u8> + AsBytes + StreamIsPartial,
 {
-    map(
+    Parser::map(
         take(3u8),
         if w_bit {
             Register::word
