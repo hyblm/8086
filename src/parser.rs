@@ -42,11 +42,11 @@ pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
 }
 
 fn parse_immediate(i: BitInput, is_word: bool) -> IResult<BitInput, Immediate> {
-    let (i, low) = take(8u8)(i)?;
+    let (i, low) = take(8u8).parse_next(i)?;
     Ok(if !is_word {
         (i, Immediate::Byte(low))
     } else {
-        let (i, high): (BitInput, u16) = take(8u8)(i)?;
+        let (i, high): (BitInput, u16) = take(8u8).parse_next(i)?;
         let high = high << 8;
         let word = high + u16::from(low);
         (i, Immediate::Word(word))
@@ -95,15 +95,15 @@ fn parse_addr(i: BitInput) -> IResult<BitInput, Address> {
 }
 
 pub fn take_nibble(i: BitInput) -> IResult<BitInput, u8> {
-    take(4u8)(i)
+    take(4u8).parse_next(i)
 }
 
 pub fn take_3bits(i: BitInput) -> IResult<BitInput, u8> {
-    take(3u8)(i)
+    take(3u8).parse_next(i)
 }
 
 pub fn take_2bits(i: BitInput) -> IResult<BitInput, u8> {
-    take(2u8)(i)
+    take(2u8).parse_next(i)
 }
 
 pub fn parse_reg<I, E: ParseError<(I, usize)>>(w_bit: bool) -> impl Parser<(I, usize), Register, E>
