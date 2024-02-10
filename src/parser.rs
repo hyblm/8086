@@ -1,7 +1,7 @@
 use crate::{Address, EAddress, Immediate, Instruction, Location, Op, Register, Source};
 
 use winnow::{
-    bits::{bool, take},
+    binary::bits::{bool, take},
     error::ParseError,
     stream::{AsBytes, Stream, StreamIsPartial},
     IResult, Parser,
