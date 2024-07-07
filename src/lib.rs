@@ -8,7 +8,7 @@ use std::fmt::Display;
 
 pub fn disassemble(program: &[u8]) -> String {
     let mut instruction_stream = (program, 0);
-    let mut asm = format!("bits 16\n\n");
+    let mut asm = "bits 16\n\n".to_string();
 
     while !instruction_stream.0.is_empty() {
         let (tail, instruction) = parse_instruction(instruction_stream).unwrap();
@@ -27,6 +27,7 @@ pub struct Instruction {
     destination: Location,
     source: Source,
 }
+
 impl fmt::Debug for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -36,6 +37,7 @@ impl fmt::Debug for Instruction {
         )
     }
 }
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -51,6 +53,7 @@ pub enum Location {
     Reg(Register),
     Addr(EAddress),
 }
+
 impl Display for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -68,6 +71,7 @@ pub enum Source {
     Loc(Location),
     Imm(Immediate),
 }
+
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -82,12 +86,25 @@ pub enum Immediate {
     Byte(u8),
     Word(u16),
 }
+
 impl Display for Immediate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Immediate::Byte(imm) => write!(f, "{imm}"),
             Immediate::Word(imm) => write!(f, "{imm}"),
         }
+    }
+}
+
+impl From<u8> for Immediate {
+    fn from(value: u8) -> Self {
+        Immediate::Byte(value)
+    }
+}
+
+impl From<u16> for Immediate {
+    fn from(value: u16) -> Self {
+        Immediate::Word(value)
     }
 }
 
@@ -98,6 +115,7 @@ pub enum Op {
     MovImmediateReg,
     Unimplemented,
 }
+
 impl Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let opcode_string = match self {
@@ -161,6 +179,7 @@ pub enum Register {
     Si,
     Di,
 }
+
 impl Register {
     fn byte(value: u8) -> Self {
         match value {
@@ -174,6 +193,7 @@ impl Register {
             _ => Self::Bh,
         }
     }
+
     fn word(value: u8) -> Self {
         match value {
             0b000 => Self::Ax,
@@ -187,6 +207,7 @@ impl Register {
         }
     }
 }
+
 impl Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let register_str = match self {

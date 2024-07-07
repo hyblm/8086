@@ -2,7 +2,7 @@ use crate::{Address, EAddress, Immediate, Instruction, Location, Op, Register, S
 
 use winnow::{
     binary::bits::{bool, take},
-    error::ParseError,
+    error::ParserError,
     stream::{AsBytes, Stream, StreamIsPartial},
     IResult, Parser,
 };
@@ -13,9 +13,9 @@ pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
     let (i, opcode) = parse_opcode(i)?;
     let (i, destination, source) = match opcode {
         Op::MovRegRM => {
-            let (i, (d_bit, is_word, mode)) = (bool, bool, take_2bits).parse_next(i)?;
-            let (i, reg) = parse_reg(is_word).parse_next(i)?;
-            let (i, rm) = parse_rm(mode, is_word, i)?;
+            let (i, (d_bit, is_word, mode)) = (bool, bool, take(2u8)).parse_peek(i)?;
+            let (i, reg) = parse_reg(is_word).parse_peek(i)?;
+            let (i, rm) = parse_rm(i, mode, is_word)?;
             if d_bit {
                 (i, Location::Reg(reg), Source::Loc(rm))
             } else {
@@ -23,9 +23,10 @@ pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
             }
         }
         Op::MovImmediateReg => {
-            let (i, is_word) = bool(i)?;
-            let (i, reg) = parse_reg(is_word).parse_next(i)?;
+            let (i, is_word) = bool.parse_peek(i)?;
+            let (i, reg) = parse_reg(is_word).parse_peek(i)?;
             let (i, val) = parse_immediate(i, is_word)?;
+
             (i, Location::Reg(reg), Source::Imm(val))
         }
         Op::MovImmediateRM => todo!(),
@@ -42,31 +43,28 @@ pub fn parse_instruction(i: BitInput) -> IResult<BitInput, Instruction> {
 }
 
 fn parse_immediate(i: BitInput, is_word: bool) -> IResult<BitInput, Immediate> {
-    let (i, low) = take(8u8).parse_next(i)?;
+    let (i, low) = take(8u8).parse_peek(i)?;
     Ok(if !is_word {
         (i, Immediate::Byte(low))
     } else {
-        let (i, high): (BitInput, u16) = take(8u8).parse_next(i)?;
+        let (i, high): (BitInput, u16) = take(8u8).parse_peek(i)?;
         let high = high << 8;
         let word = high + u16::from(low);
         (i, Immediate::Word(word))
     })
 }
 
-// TODO(matyas): remove is_word and mode parameters from RM parser
-fn parse_rm(mode: u8, w_bit: bool, i: BitInput) -> IResult<BitInput, Location> {
+fn parse_rm(i: BitInput, mode: u8, w_bit: bool) -> IResult<BitInput, Location> {
     assert!(mode <= 3);
     if let 0b11 = mode {
-        let (i, reg) = parse_reg(w_bit).parse_next(i)?;
-        Ok((i, Location::Reg(reg)))
+        parse_reg(w_bit).map(Location::Reg).parse_peek(i)
     } else {
-        let (i, addr) = parse_addr(i)?;
-        let (i, eaddr) = parse_eaddr(i, mode, addr)?;
-        Ok((i, Location::Addr(eaddr)))
+        parse_eaddr(i, mode).map(|(i, a)| (i, Location::Addr(a)))
     }
 }
 
-fn parse_eaddr(i: BitInput, mode: u8, addr: Address) -> IResult<BitInput, EAddress> {
+fn parse_eaddr(i: BitInput, mode: u8) -> IResult<BitInput, EAddress> {
+    let (i, addr) = parse_addr(i)?;
     let (i, eaddr) = if mode == 0 {
         (i, EAddress::Bare(addr))
     } else {
@@ -79,7 +77,7 @@ fn parse_eaddr(i: BitInput, mode: u8, addr: Address) -> IResult<BitInput, EAddre
 }
 
 fn parse_addr(i: BitInput) -> IResult<BitInput, Address> {
-    let (i, addr) = take_3bits(i)?;
+    let (i, addr) = take(3u8).parse_peek(i)?;
     use Address::*;
     let addr = match addr {
         0b000 => BxSi,
@@ -94,37 +92,22 @@ fn parse_addr(i: BitInput) -> IResult<BitInput, Address> {
     Ok((i, addr))
 }
 
-pub fn take_nibble(i: BitInput) -> IResult<BitInput, u8> {
-    take(4u8).parse_next(i)
-}
-
-pub fn take_3bits(i: BitInput) -> IResult<BitInput, u8> {
-    take(3u8).parse_next(i)
-}
-
-pub fn take_2bits(i: BitInput) -> IResult<BitInput, u8> {
-    take(2u8).parse_next(i)
-}
-
-pub fn parse_reg<I, E: ParseError<(I, usize)>>(w_bit: bool) -> impl Parser<(I, usize), Register, E>
+pub fn parse_reg<I, E: ParserError<(I, usize)>>(w_bit: bool) -> impl Parser<(I, usize), Register, E>
 where
-    I: Stream<Token = u8> + AsBytes + StreamIsPartial,
+    I: Stream<Token = u8> + AsBytes + StreamIsPartial + Clone,
 {
-    Parser::map(
-        take(3u8),
-        if w_bit {
-            Register::word
-        } else {
-            Register::byte
-        },
-    )
+    take(3u8).map(if w_bit {
+        Register::word
+    } else {
+        Register::byte
+    })
 }
 
 pub fn parse_opcode(i: BitInput) -> IResult<BitInput, Op> {
-    let (i, partial) = take_nibble(i)?;
+    let (i, partial) = take(4u8).parse_peek(i)?;
     let (i, opcode) = match partial {
         0b1000 => {
-            let (i, _) = take_2bits(i)?;
+            let (i, _): (_, u8) = take(2u8).parse_peek(i)?;
             (i, Op::MovRegRM)
         }
         0b1011 => (i, Op::MovImmediateReg),
